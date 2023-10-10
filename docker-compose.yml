@@ -1,0 +1,40 @@
+version: "3"
+
+
+services:
+  web:
+    build: .
+    container_name: django_bot
+    volumes:
+      - .:/opt/services/app/src:Z
+    ports:
+      - "8007:8007"
+    depends_on:
+      - database
+    env_file:
+      - .env
+    command: gunicorn django_bot.wsgi:application --bind 0.0.0.0:8007 --reload
+    networks:
+      - database_network
+
+  database:
+    image: postgres:15
+    container_name: django_db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - db:/var/lib/postgresql/data
+    networks:
+      - database_network
+
+
+networks:
+  database_network:
+    driver: bridge
+
+volumes:
+  db:
