@@ -12,17 +12,3 @@ class BaseModel(models.Model):
         abstract = True
 
 
-class BaseIdModel(BaseModel):
-    """BaseIdModel"""
-
-    id = models.IntegerField(
-        primary_key=True,
-        editable=False,
-        unique=True,
-    )
-
-    class Meta:
-        abstract = True
-
-
-

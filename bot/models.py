@@ -2,10 +2,10 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from core.models.base import BaseIdModel
+from core.models.base import BaseModel
 
 
-class UserChatSetting(BaseIdModel):
+class UserChatSetting(BaseModel):
     """UserChatSetting"""
     user = models.OneToOneField(
         User,
@@ -17,6 +17,9 @@ class UserChatSetting(BaseIdModel):
         verbose_name=_("Bot token"),
         max_length=20
     )
+    chat_id = models.CharField(
+        verbose_name=_("Chat Id"), max_length=100, null=True, blank=True
+    )
 
     class Meta:
         verbose_name = _("User Chat Setting")
@@ -24,7 +27,7 @@ class UserChatSetting(BaseIdModel):
         db_table = "user_chat_settings"
 
 
-class UseChatHistory(BaseIdModel):
+class UseChatHistory(BaseModel):
     """UseChatHistory"""
 
     user = models.ForeignKey(
