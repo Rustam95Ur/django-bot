@@ -4,7 +4,6 @@ import string
 from django.contrib.auth.models import User
 
 from drf_yasg.utils import swagger_auto_schema
-from keyring.testing.util import random_string
 
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
@@ -42,7 +41,6 @@ class UseChatHistoryViewSet(
 class UserViewSet(
     viewsets.GenericViewSet,
     generics.CreateAPIView,
-    generics.ListAPIView
 ):
     queryset = User.objects.all()
     serializer_class = UserSerializer
