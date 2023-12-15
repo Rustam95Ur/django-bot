@@ -4,7 +4,7 @@ version: "3"
 services:
   web:
     build: .
-    container_name: django_bot
+    container_name: i_park_wsgi
     volumes:
       - .:/opt/services/app/src:Z
     ports:
@@ -13,13 +13,13 @@ services:
       - database
     env_file:
       - .env
-    command: gunicorn django_bot.wsgi:application --bind 0.0.0.0:8007 --reload
+    command: gunicorn project.wsgi:application --bind 0.0.0.0:8007 --reload
     networks:
       - database_network
 
   database:
     image: postgres:15
-    container_name: django_db
+    container_name: i_park_db
     ports:
       - "5432:5432"
     environment:

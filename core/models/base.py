@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -12,3 +14,15 @@ class BaseModel(models.Model):
         abstract = True
 
 
+class BaseUUIDModel(BaseModel):
+    """BaseUUIDModel"""
+
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+    )
+
+    class Meta:
+        abstract = True

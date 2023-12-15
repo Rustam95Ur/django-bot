@@ -1,4 +1,4 @@
-"""django_bot URL Configuration
+"""project URL Configuration
 
 The `urlpatterns` list routes URLs to views. For more information please see:
     https://docs.djangoproject.com/en/3.2/topics/http/urls/
@@ -25,8 +25,6 @@ api_urlpatterns = [
     #     "token/obtain/", ObtainJWTAPIView.as_view(), name="token_obtain_pair"
     # ),
     path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
-
-    path("bot/", include("bot.api.urls")),
 ]
 
 urlpatterns = [
