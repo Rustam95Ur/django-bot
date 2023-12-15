@@ -1,3 +1,15 @@
-/static/
-
 .idea
+.env
+/project/static/
+
+
+venv
+__pycache__/
+!/media
+/media/*
+/logs
+# Translations
+*.mo
+*.pot
+
+celerybeat-schedule
