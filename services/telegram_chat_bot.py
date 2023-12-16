@@ -3,8 +3,8 @@ from django.utils.translation import gettext_lazy as _
 
 from telegram.ext import (
     MessageHandler,
-    Filters,
-    Dispatcher,
+    # Filters,
+    # Dispatcher,
     CommandHandler,
     ConversationHandler,
     CallbackContext,
@@ -148,23 +148,23 @@ def setup_dispatcher(dispatchers):
     """
     Adding handlers for events from Telegram
     """
-    conversation_handler = ConversationHandler(
-        entry_points=[CommandHandler("start", TelegramBot.start_command)],
-        states={
-            BotCommandStatus.UPDATE_PHONE: [
-                MessageHandler(Filters.contact, TelegramBot.update_phone)
-            ],
-            BotCommandStatus.START_CHAT: [
-                MessageHandler(
-                    Filters.text | Filters.command | Filters.photo,
-                    TelegramBot.start_chat,
-                )
-            ],
-        },
-        fallbacks=[CommandHandler("end_chat", TelegramBot.end_chat)],
-    )
+    # conversation_handler = ConversationHandler(
+    #     entry_points=[CommandHandler("start", TelegramBot.start_command)],
+    #     states={
+    #         BotCommandStatus.UPDATE_PHONE: [
+    #             MessageHandler(Filters.contact, TelegramBot.update_phone)
+    #         ],
+    #         BotCommandStatus.START_CHAT: [
+    #             MessageHandler(
+    #                 Filters.text | Filters.command | Filters.photo,
+    #                 TelegramBot.start_chat,
+    #             )
+    #         ],
+    #     },
+    #     fallbacks=[CommandHandler("end_chat", TelegramBot.end_chat)],
+    # )
 
-    dispatchers.add_handler(conversation_handler)
+    # dispatchers.add_handler(conversation_handler)
 
     return dispatchers
 
@@ -172,15 +172,15 @@ def setup_dispatcher(dispatchers):
 if settings.TELEGRAM_BOT_TOKEN:
     bot = Bot(settings.TELEGRAM_BOT_TOKEN)
 
-    dispatcher = setup_dispatcher(
-        Dispatcher(
-            bot,
-            update_queue=None,
-        )
-    )
+    # dispatcher = setup_dispatcher(
+    # Dispatcher(
+    #     bot,
+    #     update_queue=None,
+    # )
+    # )
 
 
 def process_telegram_event(update_json):
     # processing current command states
-    update = Update.de_json(update_json, bot)
-    dispatcher.process_update(update)
+    Update.de_json(update_json, bot)
+    # dispatcher.process_update(update)

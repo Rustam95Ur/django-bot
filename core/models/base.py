@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from django.utils.translation import gettext_lazy as _
 
 
 class BaseModel(models.Model):
@@ -23,6 +24,15 @@ class BaseUUIDModel(BaseModel):
         editable=False,
         unique=True,
     )
+
+    class Meta:
+        abstract = True
+
+
+class BaseNameModel(BaseUUIDModel):
+    """BaseNameModel"""
+
+    name = models.CharField(verbose_name=_("Name"), unique=True, max_length=50)
 
     class Meta:
         abstract = True

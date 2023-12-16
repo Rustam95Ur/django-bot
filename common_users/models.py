@@ -15,7 +15,8 @@ from common_users.constants import (
 class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     """CommonUser"""
 
-    phone = PhoneNumberField(verbose_name=_("Phone"), unique=True)
+    phone = PhoneNumberField(verbose_name=_("Phone"))
+    username = models.CharField(verbose_name=_("Username"))
     user_type = models.PositiveSmallIntegerField(
         verbose_name=_("User type"),
         choices=UserType.CHOICES,
@@ -28,7 +29,7 @@ class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
         verbose_name=_("First name"), max_length=32, blank=True, default=""
     )
     last_name = models.CharField(
-        verbose_name=_("Last name"), max_length=255, blank=True, default=""
+        verbose_name=_("Last name"), max_length=255, blank=True, null=True
     )
     birthday = models.DateField(
         verbose_name=_("Date of birthday"), null=True, blank=True
@@ -36,9 +37,12 @@ class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     is_active = models.BooleanField(verbose_name=_("Is active"), default=True)
     is_staff = models.BooleanField(verbose_name=_("Is staff"), default=False)
     chat_id = models.CharField(
-        verbose_name=_("Chat Id"), max_length=100, null=True, blank=True
+        verbose_name=_("Chat id"), max_length=100, null=True, blank=True
     )
-    USERNAME_FIELD = "phone"
+    telegram_user_id = models.CharField(
+        verbose_name=_("Telegram user id"), max_length=100, unique=True
+    )
+    USERNAME_FIELD = "telegram_user_id"
     USERTYPE_FIELD = "user_type"
     REQUIRED_FIELDS = []
 
@@ -56,3 +60,18 @@ class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     @property
     def full_name(self):
         return f"{self.last_name} {self.first_name}"
+
+
+class FAQ(BaseUUIDModel):
+    """FAQ"""
+
+    question = models.TextField(verbose_name=_("Question"))
+    answer = models.TextField(verbose_name=_("Answer"))
+
+    class Meta:
+        verbose_name = "FAQ"
+        verbose_name_plural = "FAQ"
+        db_table = "faqs"
+
+    def __str__(self):
+        return f"{self.question}"
