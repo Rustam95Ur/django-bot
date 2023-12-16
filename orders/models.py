@@ -26,6 +26,7 @@ class Product(BaseNameModel):
         null=True,
     )
     is_active = models.BooleanField(verbose_name=_("Is active"), default=True)
+    is_free = models.BooleanField(verbose_name=_("Is free"), default=True)
 
     class Meta:
         verbose_name = _("Product")

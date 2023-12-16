@@ -4,6 +4,7 @@ from django.conf import settings
 from django.core.paginator import Paginator
 
 from asgiref.sync import sync_to_async
+from django.db.models import Count, F
 
 from common_users.models import CommonUser, FAQ
 from common_users.services.cart import Cart
@@ -47,7 +48,15 @@ def create_client(telegram_user_id, first_name, last_name, username):
 def get_categories(page_number):
     """returns category paginate objects"""
 
-    categories = Category.objects.filter(is_active=True).order_by("name")
+    categories = (
+        Category.objects.filter(
+            is_active=True,
+        )
+        .annotate(product_count=Count(F("products")))
+        .filter(product_count__gt=0)
+        .order_by("name")
+    )
+
     paginator = Paginator(
         object_list=categories, per_page=settings.BASE_PAGINATE_BY
     )
@@ -75,7 +84,7 @@ def get_category(category_id):
 def get_products(category_id):
     """returns products list"""
     products = Product.objects.select_related("category").filter(
-        category=category_id
+        category=category_id, is_free=True
     )
     return [product for product in products]
 
@@ -127,6 +136,7 @@ def get_cart_products_info(context):
     cart = Cart(context)
     products = []
     products_info = ""
+
     for position, product in enumerate(cart, start=1):
         products.append(product["product"])
         raw_name = product["product"]
@@ -136,7 +146,8 @@ def get_cart_products_info(context):
         product_total_price = product["total_price"]
         products_info += tw.dedent(
             f"""
-        №{position}. <b>{name}</b>
+        №{position}. 
+        <i>Парковочное место:</i> <b>{name}</b>
         <i>Цена:</i> {price} тг.
         <i>Количество:</i> {quantity} час(а)
         <i>Стоимость:</i> {product_total_price} тг.
@@ -155,6 +166,7 @@ def get_product_info_for_payment(context):
     products_in_cart = get_cart_info(context)
     total_order_price = products_in_cart.get_total_price()
     products_info = ""
+
     for product in products_in_cart:
         raw_name = product["product"]
         name = raw_name.name

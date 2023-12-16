@@ -47,8 +47,9 @@ from common_users.services.bot_tools import (
     HANDLE_MENU,
     HANDLE_PRODUCTS,
     HANDLE_USER_REPLY,
+    HANDLE_WAITING,
     START_OVER,
-) = range(7)
+) = range(8)
 
 
 logging.basicConfig(
@@ -57,6 +58,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+BACK_BUTTON = InlineKeyboardButton("Назад", callback_data="back")
 
 
 async def get_chat_member(update, context):
@@ -87,11 +90,7 @@ async def start(update, context):
                     text="📋 Свободные места", callback_data="catalog"
                 )
             ],
-            [
-                InlineKeyboardButton(
-                    text="🛒 Мой брони", callback_data="Корзина"
-                )
-            ],
+            [InlineKeyboardButton(text="🛒 Мои брони", callback_data="cart")],
             [InlineKeyboardButton(text="🗣 FAQ", callback_data="faq")],
             [
                 InlineKeyboardButton(
@@ -192,7 +191,7 @@ async def get_menu(current_page):
         )
 
     footer_buttons.append(
-        InlineKeyboardButton("Главное меню", callback_data="Главное меню")
+        InlineKeyboardButton("Главное меню", callback_data="main_menu")
     )
 
     return InlineKeyboardMarkup(
@@ -201,7 +200,7 @@ async def get_menu(current_page):
 
 
 async def handle_categories(update, context):
-    if update.callback_query.data in ("catalog", "Назад"):
+    if update.callback_query.data in ("catalog", "back"):
         await show_main_page(update, context)
 
     elif update.callback_query.data == "next":
@@ -232,8 +231,8 @@ async def handle_products(update, context):
 
     keyboard = [
         [
-            InlineKeyboardButton("Назад", callback_data="Назад"),
-            InlineKeyboardButton("Главное меню", callback_data="Главное меню"),
+            BACK_BUTTON,
+            InlineKeyboardButton("Главное меню", callback_data="main_menu"),
         ]
     ]
 
@@ -259,7 +258,7 @@ async def handle_product_detail(update, context):
     for i in range(1, 4):
         keyboard.append(InlineKeyboardButton(f"{i} час(а)", callback_data=i))
 
-    keyboard.append(InlineKeyboardButton("Назад", callback_data="Назад"))
+    keyboard.append(BACK_BUTTON)
     keyboard_groups = build_menu(keyboard, n_cols=1)
 
     await context.bot.send_message(
@@ -295,9 +294,9 @@ async def check_quantity(update, context):
         reply_markup = InlineKeyboardMarkup(
             [
                 [
-                    InlineKeyboardButton("Назад", callback_data="Назад"),
+                    BACK_BUTTON,
                     InlineKeyboardButton(
-                        "Подтвердить", callback_data="Подтвердить"
+                        "Подтвердить", callback_data="confirm"
                     ),
                 ]
             ]
@@ -334,29 +333,38 @@ async def add_cart(update, context):
         await show_main_page(update, context)
         return HANDLE_CATEGORIES
 
-    elif update.callback_query.data == "Назад":
+    elif update.callback_query.data == "back":
         await show_main_page(update, context)
         return HANDLE_PRODUCTS
 
     else:
-        product_to_cart = await add_product_to_cart(context)
-        reply_markup = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "Категории", callback_data="Категории"
-                    ),
-                    InlineKeyboardButton("Корзина", callback_data="Корзина"),
-                    InlineKeyboardButton("Назад", callback_data="Назад"),
-                ]
-            ]
+        await add_product_to_cart(context)
+        products_info, products = await get_cart_products_info(context)
+        keyboard = []
+
+        back = [BACK_BUTTON]
+
+        for position, product in enumerate(products, start=1):
+            keyboard.append(
+                InlineKeyboardButton(
+                    f"Удалить позицию №{position}",
+                    callback_data=str(product.id),
+                )
+            )
+        keyboard_groups = build_menu(keyboard, n_cols=2)
+        keyboard_groups.append(
+            [InlineKeyboardButton("Оплатить", callback_data="payment")]
         )
-        await context.bot.send_message(
-            text=product_to_cart,
-            chat_id=update.effective_chat.id,
+        keyboard_groups.append(back)
+
+        reply_markup = InlineKeyboardMarkup(keyboard_groups)
+
+        await update.callback_query.edit_message_text(
+            text=products_info,
             reply_markup=reply_markup,
             parse_mode=ParseMode.HTML,
         )
+        return HANDLE_MENU
 
 
 async def show_cart_info(update, context):
@@ -366,8 +374,7 @@ async def show_cart_info(update, context):
 
 
 async def handle_cart(update, context):
-    back = [InlineKeyboardButton("Назад", callback_data="Назад")]
-
+    """handle cart"""
     if "cart" not in context.user_data:
         await update.callback_query.answer("Пустая корзина")
         return
@@ -382,7 +389,10 @@ async def handle_cart(update, context):
                 )
             )
         keyboard_groups = build_menu(keyboard, n_cols=2)
-        keyboard_groups.append(back)
+        keyboard_groups.append(
+            [InlineKeyboardButton("Оплатить", callback_data="payment")]
+        )
+        keyboard_groups.append([BACK_BUTTON])
         reply_markup = InlineKeyboardMarkup(keyboard_groups)
         await update.callback_query.edit_message_text(
             text=products_info,
@@ -398,25 +408,6 @@ async def remove_product(update, context):
     await remove_product_from_cart(context)
     await update.callback_query.answer("Товар удален из корзины")
     await handle_cart(update, context)
-    return HANDLE_MENU
-
-
-async def save_customer(update, context):
-    reply_markup = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("Оплатить", callback_data="Оплатить")],
-            [
-                InlineKeyboardButton(
-                    "Главное меню", callback_data="Главное меню"
-                )
-            ],
-        ]
-    )
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text(
-        "Ваш адрес успешно сохранен, теперь можите оплатить ваш заказ",
-        reply_markup=reply_markup,
-    )
     return HANDLE_MENU
 
 
@@ -436,7 +427,7 @@ async def handle_user_payment(update, context):
     return HANDLE_USER_REPLY
 
 
-async def precheckout_callback(update, context):
+async def pre_checkout_callback(update, context):
     query = update.pre_checkout_query
     if query.invoice_payload != "telegram-store":
         await query.answer(ok=False, error_message="Something went wrong...")
@@ -446,9 +437,7 @@ async def precheckout_callback(update, context):
 
 
 async def successful_payment_callback(update, context):
-    reply_markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Назад", callback_data="Назад")]]
-    )
+    reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
     if await create_order(context):
         await upload_to_exel()
         context.user_data["cart"] = None
@@ -484,11 +473,10 @@ async def cancel(update, context):
     return ConversationHandler.END
 
 
-async def handle_tech_support(update, context):
-    text = "<b>Что вас беспокоит </b>"
-    reply_markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Назад", callback_data="Назад")]]
-    )
+async def handle_faq(update, context):
+    """handle faq"""
+    text = "<b>Часто задаваемые вопросы:</b>"
+    reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
     text_faq = await get_text_faq()
 
     await update.callback_query.answer()
@@ -523,42 +511,40 @@ def bot_starting():
         entry_points=[CommandHandler("start", start)],
         states={
             HANDLE_MENU: [
-                CallbackQueryHandler(handle_user_payment, pattern=r"Оплатить"),
-                CallbackQueryHandler(remove_product, pattern=uuid_pattern),
-                CallbackQueryHandler(start, pattern="Назад"),
+                CallbackQueryHandler(handle_user_payment, pattern=r"payment"),
+                # CallbackQueryHandler(remove_product, pattern=uuid_pattern),
+                CallbackQueryHandler(start, pattern="back"),
             ],
             HANDLE_CATEGORIES: [
                 CallbackQueryHandler(handle_categories, pattern=uuid_pattern),
-                CallbackQueryHandler(start, pattern=r"Главное меню"),
-                CallbackQueryHandler(handle_cart, pattern=r"Корзина"),
-                CallbackQueryHandler(
-                    handle_tech_support, pattern=r"tech_support"
-                ),
+                CallbackQueryHandler(start, pattern=r"main_menu"),
+                CallbackQueryHandler(handle_cart, pattern=r"cart"),
+                CallbackQueryHandler(handle_faq, pattern=r"faq"),
                 CallbackQueryHandler(handle_categories),
             ],
             HANDLE_PRODUCTS: [
                 CallbackQueryHandler(handle_products, pattern=uuid_pattern),
-                CallbackQueryHandler(handle_categories, pattern=r"Назад"),
-                CallbackQueryHandler(start, pattern=r"Главное меню"),
+                CallbackQueryHandler(handle_categories, pattern=r"back"),
+                CallbackQueryHandler(start, pattern=r"main_menu"),
                 CallbackQueryHandler(handle_categories),
             ],
             HANDLE_DESCRIPTION: [
                 CallbackQueryHandler(
                     handle_product_detail, pattern=uuid_pattern
                 ),
-                CallbackQueryHandler(handle_categories, pattern=r"Назад"),
-                CallbackQueryHandler(start, pattern=r"Главное меню"),
+                CallbackQueryHandler(handle_categories, pattern=r"back"),
+                CallbackQueryHandler(start, pattern=r"main_menu"),
             ],
             HANDLE_CART: [
                 CallbackQueryHandler(check_quantity, pattern=r"[1-3]"),
                 MessageHandler(filters.TEXT, check_quantity),
-                CallbackQueryHandler(handle_categories, pattern=r"Назад"),
-                CallbackQueryHandler(add_cart, pattern=r"Подтвердить"),
-                CallbackQueryHandler(handle_cart, pattern=r"Корзина"),
+                CallbackQueryHandler(handle_categories, pattern=r"back"),
+                CallbackQueryHandler(add_cart, pattern=r"confirm"),
+                CallbackQueryHandler(handle_cart, pattern=r"cart"),
                 CallbackQueryHandler(add_cart),
             ],
             HANDLE_USER_REPLY: [
-                PreCheckoutQueryHandler(precheckout_callback),
+                PreCheckoutQueryHandler(pre_checkout_callback),
                 MessageHandler(
                     filters.SUCCESSFUL_PAYMENT, successful_payment_callback
                 ),
@@ -578,6 +564,8 @@ def bot_starting():
 
 
 class Command(BaseCommand):
+    """Command"""
+
     help = "Telegram bot"
 
     def handle(self, *args, **options):
