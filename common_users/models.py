@@ -1,10 +1,10 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
-from django.conf import settings
 
 from phonenumber_field.modelfields import PhoneNumberField
 
+from common_users.managers import UserManager
 from core.models.base import BaseUUIDModel
 
 from common_users.constants import (
@@ -41,6 +41,8 @@ class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     USERNAME_FIELD = "phone"
     USERTYPE_FIELD = "user_type"
     REQUIRED_FIELDS = []
+
+    objects = UserManager()
 
     def __str__(self):
         return f"{self.first_name} {self.last_name}"
