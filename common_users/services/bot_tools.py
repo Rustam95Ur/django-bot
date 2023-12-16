@@ -1,10 +1,15 @@
 import textwrap as tw
 
 from django.conf import settings
+from django.core.paginator import Paginator
 
 from asgiref.sync import sync_to_async
 
 from common_users.models import CommonUser, FAQ
+from common_users.services.cart import Cart
+
+from orders.models import Category, Product
+
 
 # from faq.models import FAQ
 # from mailings.models import Mailing
@@ -21,7 +26,7 @@ from common_users.models import CommonUser, FAQ
 @sync_to_async
 def get_clients():
     clients = CommonUser.objects.all()
-    return [client.tg_user_id for client in clients]
+    return [client.telegram_user_id for client in clients]
 
 
 @sync_to_async
@@ -39,76 +44,87 @@ def create_client(telegram_user_id, first_name, last_name, username):
 
 
 @sync_to_async
-def get_catigories(super_category=None):
-    categories = CommonUser.objects.filter(sub_category=super_category)
-    return [category for category in categories]
+def get_categories(page_number):
+    """returns category paginate objects"""
+
+    categories = Category.objects.filter(is_active=True).order_by("name")
+    paginator = Paginator(
+        object_list=categories, per_page=settings.BASE_PAGINATE_BY
+    )
+
+    page_obj = paginator.get_page(page_number)
+
+    categories_list = [x for x in page_obj]
+
+    return_data = {
+        "categories": categories_list,
+        "has_previous": page_obj.has_previous(),
+        "has_next": page_obj.has_next(),
+    }
+
+    return return_data
 
 
 @sync_to_async
 def get_category(category_id):
-    category = CommonUser.objects.get(id=category_id)
+    category = Category.objects.get(id=category_id)
     return category
 
 
 @sync_to_async
 def get_products(category_id):
-    products = CommonUser.objects.select_related("category").filter(
+    """returns products list"""
+    products = Product.objects.select_related("category").filter(
         category=category_id
     )
     return [product for product in products]
 
 
 def get_product_detail(product):
-    return tw.dedent(
-        f"""
-    <b>{product.name}</b>
-    <i>{product.description}</i>
-    Цена <b>{product.price}</b> руб.
-    """
-    )
+    """returns product detail"""
+    return tw.dedent(f"<b>{product.name}</b>")
 
 
 @sync_to_async
 def get_product_name(product_id):
-    product = CommonUser.objects.get(id=product_id)
-    return tw.dedent(
-        f"""
-    <b>{product.name}</b>
-    цена <b>{product.price}</b>
-    """
-    )
+    """returns product name"""
+    product = Product.objects.get(id=product_id)
+    return tw.dedent(f"<b>{product.name}</b>")
 
 
 @sync_to_async
 def add_product_to_cart(context):
+    """add product to card"""
     product_id = context.user_data["product_id"]
     quantity = int(context.user_data["quantity"])
-    product = CommonUser.objects.get(id=product_id)
-    cart = CommonUser(context)
+    product = Product.objects.get(id=product_id)
+    cart = Cart(context)
     cart.add(product=product, quantity=quantity)
     return tw.dedent(
         f"""
     Добавлено в корзину:
-    <b>{quantity} шт. {product.name}</b>"""
+    <b>{quantity} час(а) {product.name}</b>"""
     )
 
 
 @sync_to_async
 def remove_product_from_cart(context):
+    """remove product from cart"""
     product_id = context.user_data["product_id"]
-    product = CommonUser.objects.get(id=product_id)
-    cart = CommonUser(context)
+    product = Product.objects.get(id=product_id)
+    cart = Cart(context)
     cart.remove(product)
 
 
 def get_cart_info(context):
-    cart = CommonUser(context)
+    """returns cart info"""
+    cart = Cart(context)
     return cart
 
 
 @sync_to_async
 def get_cart_products_info(context):
-    cart = CommonUser(context)
+    cart = Cart(context)
     products = []
     products_info = ""
     for position, product in enumerate(cart, start=1):
@@ -121,14 +137,14 @@ def get_cart_products_info(context):
         products_info += tw.dedent(
             f"""
         №{position}. <b>{name}</b>
-        <i>Цена:</i> ₽{price}
-        <i>Количество:</i> {quantity} шт.
-        <i>Стоимость:</i> ₽{product_total_price}
+        <i>Цена:</i> {price} тг.
+        <i>Количество:</i> {quantity} час(а)
+        <i>Стоимость:</i> {product_total_price} тг.
         """
         )
     products_info += tw.dedent(
         f"""
-    <i>Общая стоимость:</i> ₽{cart.get_total_price()}
+    <i>Общая стоимость:</i> {cart.get_total_price()} тг.
     """
     )
     return products_info, products
@@ -146,12 +162,12 @@ def get_product_info_for_payment(context):
         products_info += tw.dedent(
             f"""
         {name}
-        Количество: {quantity} шт.
+        Количество: {quantity} час(а)
         """
         )
     products_info += tw.dedent(
         f"""
-    Общая стоимость: ₽{total_order_price}
+    Общая стоимость: {total_order_price} тг.
     """
     )
     return {
@@ -162,15 +178,15 @@ def get_product_info_for_payment(context):
 
 @sync_to_async
 def create_order(context):
-    cart = CommonUser(context)
-    address = context.user_data["address"]
-    tg_user_id = context.user_data["tg_user_id"]
-    client = CommonUser.objects.get(telegram_user_id=tg_user_id)
+    cart = Cart(context)
+    telegram_user_id = context.user_data["telegram_user_id"]
+    client = CommonUser.objects.get(telegram_user_id=telegram_user_id)
+
     order = CommonUser.objects.create(
         client=client,
-        address=address,
     )
     order_elements = []
+
     for order_product in cart:
         product = order_product["product"]
         quantity = order_product["quantity"]
@@ -180,6 +196,7 @@ def create_order(context):
             quantity=quantity,
         )
         order_elements.append(order_element)
+
     CommonUser.objects.bulk_create(order_elements)
 
     return True
@@ -188,7 +205,7 @@ def create_order(context):
 @sync_to_async
 def upload_to_exel():
     CommonUser.objects.select_related("client")
-    settings.ORDERS_FILE_PATH
+    # settings.ORDERS_FILE_PATH
 
 
 @sync_to_async

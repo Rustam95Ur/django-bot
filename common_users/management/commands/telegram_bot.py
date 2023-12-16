@@ -2,7 +2,6 @@ import logging
 import textwrap
 import re
 
-from more_itertools import chunked
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -29,7 +28,7 @@ from common_users.services.bot_tools import (
     create_client,
     create_order,
     get_cart_products_info,
-    get_catigories,
+    get_categories,
     get_mailing,
     get_product_detail,
     get_product_info_for_payment,
@@ -46,12 +45,10 @@ from common_users.services.bot_tools import (
     HANDLE_CART,
     HANDLE_DESCRIPTION,
     HANDLE_MENU,
-    HANDLE_SUB_CATEGORIES,
     HANDLE_PRODUCTS,
     HANDLE_USER_REPLY,
-    HANDLE_WAITING,
     START_OVER,
-) = range(9)
+) = range(7)
 
 
 logging.basicConfig(
@@ -114,7 +111,7 @@ async def start(update, context):
     else:
         telegram_user_id = update.effective_user.id
         username = update.effective_user.username
-        context.user_data["tg_user_id"] = telegram_user_id
+        context.user_data["telegram_user_id"] = telegram_user_id
         first_name = update.effective_user.first_name
         last_name = update.effective_user.last_name
 
@@ -143,138 +140,107 @@ async def start(update, context):
     return HANDLE_CATEGORIES
 
 
-async def show_main_page(update, context, super_category_id):
-    context.user_data["current_page"] = 0
+async def show_main_page(update, context):
+    context.user_data["current_page"] = 1
 
-    menu = await get_menu(context.user_data["current_page"], super_category_id)
+    menu = await get_menu(context.user_data["current_page"])
 
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        text="Выберите категорию:", reply_markup=menu
+        text="Выберите парковочное место:", reply_markup=menu
     )
 
 
-async def show_next_page(update, context, super_category_id):
+async def show_next_page(update, context):
     context.user_data["current_page"] += 1
-    menu = await get_menu(context.user_data["current_page"], super_category_id)
+    menu = await get_menu(context.user_data["current_page"])
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        text="Выберите категорию:", reply_markup=menu
+        text="Выберите парковочное место:", reply_markup=menu
     )
 
 
-async def show_previos_page(update, context, super_category_id):
+async def show_previous_page(update, context):
     context.user_data["current_page"] -= 1
-    menu = await get_menu(context.user_data["current_page"], super_category_id)
+    menu = await get_menu(context.user_data["current_page"])
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(
-        text="Выберите категорию:", reply_markup=menu
+        text="Выберите парковочное место:", reply_markup=menu
     )
 
 
-async def get_menu(current_page, category_id):
-    categories = await get_catigories(category_id)
+async def get_menu(current_page):
+    """get_menu"""
 
-    categories_per_page = 4
-    categories_group = list(chunked(categories, categories_per_page))
+    categories_data = await get_categories(page_number=current_page)
 
     keyboard = [
-        InlineKeyboardButton(category.name, callback_data=category.id)
-        for category in categories_group[current_page]
+        InlineKeyboardButton(category.name, callback_data=str(category.id))
+        for category in categories_data.get("categories")
     ]
+
     footer_buttons = []
-    if current_page > 0:
+
+    if categories_data.get("has_previous"):
         footer_buttons.insert(
             0, InlineKeyboardButton("<<<", callback_data="prev")
         )
-    if current_page < len(categories_group) - 1:
+
+    if categories_data.get("has_next"):
         footer_buttons.append(
             InlineKeyboardButton(">>>", callback_data="next")
         )
-    if category_id:
-        footer_buttons.append(
-            InlineKeyboardButton("Назад", callback_data="Назад")
-        )
+
     footer_buttons.append(
         InlineKeyboardButton("Главное меню", callback_data="Главное меню")
     )
+
     return InlineKeyboardMarkup(
         build_menu(keyboard, n_cols=2, footer_buttons=footer_buttons)
     )
 
 
 async def handle_categories(update, context):
-    context.user_data["super_category_id"] = None
-    super_category_id = context.user_data["super_category_id"]
     if update.callback_query.data in ("catalog", "Назад"):
-        await show_main_page(update, context, super_category_id)
+        await show_main_page(update, context)
 
     elif update.callback_query.data == "next":
-        await show_next_page(update, context, super_category_id)
+        await show_next_page(update, context)
 
     elif update.callback_query.data == "prev":
-        await show_previos_page(update, context, super_category_id)
-    return HANDLE_SUB_CATEGORIES
+        await show_previous_page(update, context)
 
-
-async def handle_sub_categories(update, context):
-    if update.callback_query.data == "next":
-        super_category_id = context.user_data["super_category_id"]
-        await show_next_page(update, context, super_category_id)
-
-    elif update.callback_query.data == "prev":
-        super_category_id = context.user_data["super_category_id"]
-        await show_previos_page(update, context, super_category_id)
-
-    elif re.match(r"[0-9]", update.callback_query.data):
-        context.user_data["super_category_id"] = update.callback_query.data
-        super_category_id = context.user_data["super_category_id"]
-        await show_main_page(update, context, super_category_id)
-
-    elif update.callback_query.data == "Назад":
-        super_category_id = context.user_data["super_category_id"]
-        await show_main_page(update, context, super_category_id)
     return HANDLE_PRODUCTS
 
 
 async def handle_products(update, context):
     product_category = update.callback_query.data
     products_category = await get_products(product_category)
+
     products_num = len(products_category)
+
     for product in products_category:
         put_cart_button = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "Добавить в корзину", callback_data=product.id
-                    )
-                ]
-            ]
+            [[InlineKeyboardButton("Выбрать", callback_data=str(product.id))]]
         )
-        if not product.image:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=get_product_detail(product),
-                reply_markup=put_cart_button,
-                parse_mode=ParseMode.HTML,
-            )
-        else:
-            await context.bot.send_photo(
-                chat_id=update.effective_chat.id,
-                photo=product.image,
-                caption=get_product_detail(product),
-                reply_markup=put_cart_button,
-                parse_mode=ParseMode.HTML,
-            )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=get_product_detail(product),
+            reply_markup=put_cart_button,
+            parse_mode=ParseMode.HTML,
+        )
+
     keyboard = [
         [
             InlineKeyboardButton("Назад", callback_data="Назад"),
             InlineKeyboardButton("Главное меню", callback_data="Главное меню"),
         ]
     ]
+
     reply_markup = InlineKeyboardMarkup(keyboard)
+
     await context.bot.send_message(
-        text=f"Показано товаров: {products_num}",
+        text=f"Показано парковочных мест: {products_num}",
         chat_id=update.effective_chat.id,
         reply_markup=reply_markup,
     )
@@ -282,25 +248,50 @@ async def handle_products(update, context):
 
 
 async def handle_product_detail(update, context):
-    reply_markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("Назад", callback_data="Назад")]]
-    )
+    """handle product detail"""
     product_id = update.callback_query.data
     context.user_data["product_id"] = product_id
-    product_detais = await get_product_name(product_id)
-    context.user_data["product_detais"] = product_detais
+
+    product_details = await get_product_name(product_id)
+    context.user_data["product_details"] = product_details
+    text = f"""Парковочное место: {product_details}\nВыберите количество времени или введите свое количество:"""
+    keyboard = []
+    for i in range(1, 4):
+        keyboard.append(InlineKeyboardButton(f"{i} час(а)", callback_data=i))
+
+    keyboard.append(InlineKeyboardButton("Назад", callback_data="Назад"))
+    keyboard_groups = build_menu(keyboard, n_cols=1)
+
     await context.bot.send_message(
-        text=f"{product_detais}\nВведите количество:",
+        text=text,
         chat_id=update.effective_chat.id,
-        reply_markup=reply_markup,
+        reply_markup=InlineKeyboardMarkup(keyboard_groups),
         parse_mode=ParseMode.HTML,
     )
+
     return HANDLE_CART
 
 
 async def check_quantity(update, context):
-    quantity = update.message.text
+    """check quantity"""
+    if update.message:
+        quantity = update.message.text
+    else:
+        quantity = update.callback_query.data
+
     if re.match(r"[0-9]", quantity):
+        if int(quantity) == 0:
+            await context.bot.send_message(
+                text=textwrap.dedent(
+                    """
+                <b>Количество должно быть больше 0</b>
+                """
+                ),
+                chat_id=update.effective_chat.id,
+                parse_mode=ParseMode.HTML,
+            )
+            return HANDLE_CART
+
         reply_markup = InlineKeyboardMarkup(
             [
                 [
@@ -311,18 +302,19 @@ async def check_quantity(update, context):
                 ]
             ]
         )
-        product_detais = context.user_data["product_detais"]
+        product_details = context.user_data["product_details"]
         context.user_data["quantity"] = quantity
         await context.bot.send_message(
             text=textwrap.dedent(
                 f"""
-            Вы выбрали {product_detais}  {quantity} шт.
+            Вы выбрали {product_details}  {quantity} час(а).
             """
             ),
             chat_id=update.effective_chat.id,
             reply_markup=reply_markup,
             parse_mode=ParseMode.HTML,
         )
+
     else:
         await context.bot.send_message(
             text=textwrap.dedent(
@@ -339,12 +331,13 @@ async def check_quantity(update, context):
 
 async def add_cart(update, context):
     if update.callback_query.data == "Категории":
-        await show_main_page(update, context, super_category_id=None)
+        await show_main_page(update, context)
         return HANDLE_CATEGORIES
+
     elif update.callback_query.data == "Назад":
-        super_category_id = context.user_data["super_category_id"]
-        await show_main_page(update, context, super_category_id)
+        await show_main_page(update, context)
         return HANDLE_PRODUCTS
+
     else:
         product_to_cart = await add_product_to_cart(context)
         reply_markup = InlineKeyboardMarkup(
@@ -374,11 +367,7 @@ async def show_cart_info(update, context):
 
 async def handle_cart(update, context):
     back = [InlineKeyboardButton("Назад", callback_data="Назад")]
-    delivery_address = [
-        InlineKeyboardButton(
-            "Добавить адрес для доставки", callback_data="delivery_address"
-        )
-    ]
+
     if "cart" not in context.user_data:
         await update.callback_query.answer("Пустая корзина")
         return
@@ -388,12 +377,12 @@ async def handle_cart(update, context):
         for position, product in enumerate(products, start=1):
             keyboard.append(
                 InlineKeyboardButton(
-                    f"Удалить позицию №{position}", callback_data=product.id
+                    f"Удалить позицию №{position}",
+                    callback_data=str(product.id),
                 )
             )
         keyboard_groups = build_menu(keyboard, n_cols=2)
         keyboard_groups.append(back)
-        keyboard_groups.append(delivery_address)
         reply_markup = InlineKeyboardMarkup(keyboard_groups)
         await update.callback_query.edit_message_text(
             text=products_info,
@@ -410,42 +399,6 @@ async def remove_product(update, context):
     await update.callback_query.answer("Товар удален из корзины")
     await handle_cart(update, context)
     return HANDLE_MENU
-
-
-async def add_delivery_address(update, context):
-    keyboard = [
-        [InlineKeyboardButton("Корзина", callback_data="Корзина")],
-        [InlineKeyboardButton("Назад", callback_data="Назад")],
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text(
-        "Хорошо, для доставки товаров пришлите нам ваш адрес текстом",
-        reply_markup=reply_markup,
-    )
-    return HANDLE_WAITING
-
-
-async def check_address_text(update, context):
-    address = update.message.text
-    context.user_data["address"] = address
-    reply_markup = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("Верно", callback_data="Верно")],
-            [
-                InlineKeyboardButton(
-                    "Ввести снова", callback_data="Ввести снова"
-                )
-            ],
-        ]
-    )
-    await context.bot.send_message(
-        text=f"Вы ввели: <b>{address}</b>",
-        chat_id=update.message.chat_id,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.HTML,
-    )
-    return HANDLE_WAITING
 
 
 async def save_customer(update, context):
@@ -558,22 +511,24 @@ async def handle_error(update, context):
 
 
 def bot_starting():
-    tg_token = settings.TELEGRAM_BOT_TOKEN
-    application = Application.builder().token(tg_token).build()
+    """bot stat command"""
+
+    application = (
+        Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
+    )
     application.job_queue.run_repeating(handle_mailing, interval=60, first=10)
+    uuid_pattern = settings.BASE_PATTERN
+
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             HANDLE_MENU: [
                 CallbackQueryHandler(handle_user_payment, pattern=r"Оплатить"),
-                CallbackQueryHandler(remove_product, pattern=r"[0-9]"),
+                CallbackQueryHandler(remove_product, pattern=uuid_pattern),
                 CallbackQueryHandler(start, pattern="Назад"),
-                CallbackQueryHandler(
-                    add_delivery_address, pattern=r"delivery_address"
-                ),
             ],
             HANDLE_CATEGORIES: [
-                CallbackQueryHandler(handle_sub_categories, pattern=r"[0-9]"),
+                CallbackQueryHandler(handle_categories, pattern=uuid_pattern),
                 CallbackQueryHandler(start, pattern=r"Главное меню"),
                 CallbackQueryHandler(handle_cart, pattern=r"Корзина"),
                 CallbackQueryHandler(
@@ -581,37 +536,26 @@ def bot_starting():
                 ),
                 CallbackQueryHandler(handle_categories),
             ],
-            HANDLE_SUB_CATEGORIES: [
-                CallbackQueryHandler(handle_sub_categories, pattern=r"[0-9]"),
+            HANDLE_PRODUCTS: [
+                CallbackQueryHandler(handle_products, pattern=uuid_pattern),
+                CallbackQueryHandler(handle_categories, pattern=r"Назад"),
                 CallbackQueryHandler(start, pattern=r"Главное меню"),
                 CallbackQueryHandler(handle_categories),
             ],
-            HANDLE_PRODUCTS: [
-                CallbackQueryHandler(handle_products, pattern=r"[0-9]"),
-                CallbackQueryHandler(handle_categories, pattern=r"Назад"),
-                CallbackQueryHandler(start, pattern=r"Главное меню"),
-                CallbackQueryHandler(handle_sub_categories),
-            ],
             HANDLE_DESCRIPTION: [
-                CallbackQueryHandler(handle_product_detail, pattern=r"[0-9]"),
-                CallbackQueryHandler(handle_sub_categories, pattern=r"Назад"),
+                CallbackQueryHandler(
+                    handle_product_detail, pattern=uuid_pattern
+                ),
+                CallbackQueryHandler(handle_categories, pattern=r"Назад"),
                 CallbackQueryHandler(start, pattern=r"Главное меню"),
             ],
             HANDLE_CART: [
+                CallbackQueryHandler(check_quantity, pattern=r"[1-3]"),
                 MessageHandler(filters.TEXT, check_quantity),
-                CallbackQueryHandler(handle_sub_categories, pattern=r"Назад"),
+                CallbackQueryHandler(handle_categories, pattern=r"Назад"),
                 CallbackQueryHandler(add_cart, pattern=r"Подтвердить"),
                 CallbackQueryHandler(handle_cart, pattern=r"Корзина"),
                 CallbackQueryHandler(add_cart),
-            ],
-            HANDLE_WAITING: [
-                CallbackQueryHandler(
-                    add_delivery_address, pattern=r"Ввести снова"
-                ),
-                CallbackQueryHandler(save_customer, pattern=r"Верно"),
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND, check_address_text
-                ),
             ],
             HANDLE_USER_REPLY: [
                 PreCheckoutQueryHandler(precheckout_callback),

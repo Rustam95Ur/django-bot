@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "drf_yasg",
+    "orders",
     "common_users",
 ]
 
@@ -168,3 +169,10 @@ SWAGGER_SETTINGS = {
         "JWT": {"type": "apiKey", "name": "Authorization", "in": "header"}
     },
 }
+
+BASE_PAGINATE_BY = 2
+
+CART_SESSION_ID = "cart"
+BASE_PRICE = 100
+
+BASE_PATTERN = r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
