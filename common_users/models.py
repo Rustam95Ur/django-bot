@@ -16,14 +16,11 @@ class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     """CommonUser"""
 
     phone = PhoneNumberField(verbose_name=_("Phone"))
-    username = models.CharField(verbose_name=_("Username"))
+    username = models.CharField(verbose_name=_("Username"), unique=True)
     user_type = models.PositiveSmallIntegerField(
         verbose_name=_("User type"),
         choices=UserType.CHOICES,
         default=UserType.CLIENT,
-    )
-    email = models.EmailField(
-        verbose_name=_("Email address"), blank=True, null=True
     )
     first_name = models.CharField(
         verbose_name=_("First name"), max_length=32, blank=True, default=""
@@ -31,8 +28,17 @@ class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     last_name = models.CharField(
         verbose_name=_("Last name"), max_length=255, blank=True, null=True
     )
-    birthday = models.DateField(
-        verbose_name=_("Date of birthday"), null=True, blank=True
+    car_number = models.CharField(
+        verbose_name=_("Car number"), max_length=3, blank=True, null=True
+    )
+    car_serial_number = models.CharField(
+        verbose_name=_("Car serial number"),
+        max_length=3,
+        blank=True,
+        null=True,
+    )
+    car_number_region = models.IntegerField(
+        verbose_name=_("Car number region"), null=True, blank=True
     )
     is_active = models.BooleanField(verbose_name=_("Is active"), default=True)
     is_staff = models.BooleanField(verbose_name=_("Is staff"), default=False)
@@ -42,7 +48,8 @@ class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     telegram_user_id = models.CharField(
         verbose_name=_("Telegram user id"), max_length=100, unique=True
     )
-    USERNAME_FIELD = "telegram_user_id"
+
+    USERNAME_FIELD = "username"
     USERTYPE_FIELD = "user_type"
     REQUIRED_FIELDS = []
 

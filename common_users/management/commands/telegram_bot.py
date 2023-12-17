@@ -25,7 +25,7 @@ from telegram.ext import (
 from common_users.services.bot_tools import (
     add_product_to_cart,
     build_menu,
-    create_client,
+    create_user,
     create_order,
     get_cart_products_info,
     get_categories,
@@ -37,8 +37,8 @@ from common_users.services.bot_tools import (
     get_text_faq,
     remove_product_from_cart,
     upload_to_exel,
+    update_user_car,
 )
-
 
 (
     HANDLE_CATEGORIES,
@@ -49,8 +49,11 @@ from common_users.services.bot_tools import (
     HANDLE_USER_REPLY,
     HANDLE_WAITING,
     START_OVER,
-) = range(8)
-
+    HANDLE_REGISTER,
+    HANDLE_REGISTER_CAR_NUMBER,
+    HANDLE_REGISTER_CAR_SERIAL_NUMBER,
+    HANDLE_REGISTER_CAR_REGION,
+) = range(12)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -60,6 +63,43 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BACK_BUTTON = InlineKeyboardButton("Назад", callback_data="back")
+
+MAIN_MENU_BUTTONS = InlineKeyboardMarkup(
+    [
+        [
+            InlineKeyboardButton(
+                text="📋 Свободные места", callback_data="catalog"
+            )
+        ],
+        [InlineKeyboardButton(text="🛒 Мои брони", callback_data="cart")],
+        [InlineKeyboardButton(text="🗣 FAQ", callback_data="faq")],
+        [
+            InlineKeyboardButton(
+                text="🛠 Тех. поддержка", callback_data="tech_support"
+            )
+        ],
+    ]
+)
+
+
+def check_car_info_and_phone(user, update):
+    """check car info and phone"""
+    return_text = None
+
+    if user.car_number is None:
+        return_text = "<b>Заполните номер машины</b>"
+        return HANDLE_REGISTER_CAR_NUMBER, return_text
+
+    elif user.car_serial_number is None:
+        return_text = "<b>Буквы на номере автомобиля</b>"
+        return HANDLE_REGISTER_CAR_SERIAL_NUMBER, return_text
+
+    elif user.car_number_region is None:
+        return_text = "<b>Заполните регион машины</b>"
+
+        return HANDLE_REGISTER_CAR_REGION, return_text
+
+    return False, return_text
 
 
 async def get_chat_member(update, context):
@@ -83,26 +123,11 @@ async def get_chat_member(update, context):
 
 async def start(update, context):
     text = "Выберете действие:"
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    text="📋 Свободные места", callback_data="catalog"
-                )
-            ],
-            [InlineKeyboardButton(text="🛒 Мои брони", callback_data="cart")],
-            [InlineKeyboardButton(text="🗣 FAQ", callback_data="faq")],
-            [
-                InlineKeyboardButton(
-                    text="🛠 Тех. поддержка", callback_data="tech_support"
-                )
-            ],
-        ]
-    )
+
     if context.user_data.get(START_OVER):
         await update.callback_query.answer()
         await update.callback_query.edit_message_text(
-            text=text, reply_markup=keyboard
+            text=text, reply_markup=MAIN_MENU_BUTTONS
         )
 
     # elif await get_chat_member(update, context):
@@ -114,12 +139,22 @@ async def start(update, context):
         first_name = update.effective_user.first_name
         last_name = update.effective_user.last_name
 
-        await create_client(
+        user = await create_user(
             telegram_user_id=telegram_user_id,
             first_name=first_name,
             last_name=last_name,
             username=username,
         )
+        check_user_data, check_text = check_car_info_and_phone(
+            user=user, update=update
+        )
+
+        if check_user_data:
+            await update.message.reply_text(
+                textwrap.dedent(check_text),
+                parse_mode=ParseMode.HTML,
+            )
+            return check_user_data
 
         await update.message.reply_text(
             textwrap.dedent(
@@ -132,7 +167,9 @@ async def start(update, context):
         )
 
         await update.message.reply_text(
-            text=text, parse_mode=ParseMode.HTML, reply_markup=keyboard
+            text=text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_MENU_BUTTONS,
         )
     context.user_data[START_OVER] = True
 
@@ -169,7 +206,7 @@ async def show_previous_page(update, context):
 
 
 async def get_menu(current_page):
-    """get_menu"""
+    """get menu"""
 
     categories_data = await get_categories(page_number=current_page)
 
@@ -200,6 +237,8 @@ async def get_menu(current_page):
 
 
 async def handle_categories(update, context):
+    """handle categories"""
+
     if update.callback_query.data in ("catalog", "back"):
         await show_main_page(update, context)
 
@@ -213,6 +252,8 @@ async def handle_categories(update, context):
 
 
 async def handle_products(update, context):
+    """handle products"""
+
     product_category = update.callback_query.data
     products_category = await get_products(product_category)
 
@@ -248,13 +289,16 @@ async def handle_products(update, context):
 
 async def handle_product_detail(update, context):
     """handle product detail"""
+
     product_id = update.callback_query.data
     context.user_data["product_id"] = product_id
 
     product_details = await get_product_name(product_id)
     context.user_data["product_details"] = product_details
     text = f"""Парковочное место: {product_details}\nВыберите количество времени или введите свое количество:"""
+
     keyboard = []
+
     for i in range(1, 4):
         keyboard.append(InlineKeyboardButton(f"{i} час(а)", callback_data=i))
 
@@ -273,6 +317,7 @@ async def handle_product_detail(update, context):
 
 async def check_quantity(update, context):
     """check quantity"""
+
     if update.message:
         quantity = update.message.text
     else:
@@ -303,6 +348,7 @@ async def check_quantity(update, context):
         )
         product_details = context.user_data["product_details"]
         context.user_data["quantity"] = quantity
+
         await context.bot.send_message(
             text=textwrap.dedent(
                 f"""
@@ -326,6 +372,173 @@ async def check_quantity(update, context):
             parse_mode=ParseMode.HTML,
         )
         return HANDLE_CART
+
+
+async def update_car_number(update, context):
+    """update car number"""
+
+    car_number = update.message.text
+
+    if re.match(r"[0-9]", car_number):
+        if len(car_number) == 3:
+            user = await update_user_car(
+                telegram_user_id=update.effective_user.id,
+                update_dict={"car_number": car_number},
+            )
+
+            check_user_data, check_text = check_car_info_and_phone(
+                user=user, update=update
+            )
+
+            if check_user_data:
+                await update.message.reply_text(
+                    textwrap.dedent(check_text),
+                    parse_mode=ParseMode.HTML,
+                )
+                return check_user_data
+
+            await update.message.reply_text(
+                textwrap.dedent(
+                    f"""
+                    <b>Здравствуйте {update.effective_user.first_name}!</b>
+                     Добро пожаловать "iPark"
+                    """
+                ),
+                parse_mode=ParseMode.HTML,
+            )
+
+            await update.message.reply_text(
+                text="Выберете действие:",
+                parse_mode=ParseMode.HTML,
+                reply_markup=MAIN_MENU_BUTTONS,
+            )
+            return HANDLE_CATEGORIES
+
+        else:
+            await context.bot.send_message(
+                text=textwrap.dedent(
+                    """<b>Значение должно быть равна 3 цифрам</b>"""
+                ),
+                chat_id=update.effective_chat.id,
+                parse_mode=ParseMode.HTML,
+            )
+            return HANDLE_REGISTER_CAR_NUMBER
+    else:
+        await context.bot.send_message(
+            text=textwrap.dedent("""<b>Значение должно быть числом</b>"""),
+            chat_id=update.effective_chat.id,
+            parse_mode=ParseMode.HTML,
+        )
+        return HANDLE_REGISTER_CAR_NUMBER
+
+
+async def update_car_serial_number(update, context):
+    """update car serial number"""
+
+    car_serial_number = update.message.text
+
+    if len(car_serial_number) > 3:
+        await context.bot.send_message(
+            text=textwrap.dedent(
+                """<b>Значение не должно быть больше 3</b>"""
+            ),
+            chat_id=update.effective_chat.id,
+            parse_mode=ParseMode.HTML,
+        )
+        return HANDLE_REGISTER_CAR_SERIAL_NUMBER
+
+    else:
+        user = await update_user_car(
+            telegram_user_id=update.effective_user.id,
+            update_dict={"car_serial_number": car_serial_number},
+        )
+
+        check_user_data, check_text = check_car_info_and_phone(
+            user=user, update=update
+        )
+
+        if check_user_data:
+            await update.message.reply_text(
+                textwrap.dedent(check_text),
+                parse_mode=ParseMode.HTML,
+            )
+            return check_user_data
+
+        await update.message.reply_text(
+            textwrap.dedent(
+                f"""
+                <b>Здравствуйте {update.effective_user.first_name}!</b>
+                 Добро пожаловать "iPark"
+                """
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+
+        await update.message.reply_text(
+            text="Выберете действие:",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_MENU_BUTTONS,
+        )
+        return HANDLE_CATEGORIES
+
+
+async def update_car_number_region(update, context):
+    """update car number region"""
+
+    car_region = update.message.text
+
+    if re.match(r"[0-9]", car_region):
+        if int(car_region) == 0 or len(car_region) > 2:
+            await context.bot.send_message(
+                text=textwrap.dedent(
+                    """<b>Введенный регион не существует</b>"""
+                ),
+                chat_id=update.effective_chat.id,
+                parse_mode=ParseMode.HTML,
+            )
+            return HANDLE_REGISTER_CAR_REGION
+
+        user = await update_user_car(
+            telegram_user_id=update.effective_user.id,
+            update_dict={"car_number_region": int(car_region)},
+        )
+
+        check_user_data, check_text = check_car_info_and_phone(
+            user=user, update=update
+        )
+
+        if check_user_data:
+            await update.message.reply_text(
+                textwrap.dedent(check_text),
+                parse_mode=ParseMode.HTML,
+            )
+            return check_user_data
+
+        await update.message.reply_text(
+            textwrap.dedent(
+                f"""
+                <b>Здравствуйте {update.effective_user.first_name}!</b>
+                 Добро пожаловать "iPark"
+                """
+            ),
+            parse_mode=ParseMode.HTML,
+        )
+
+        await update.message.reply_text(
+            text="Выберете действие:",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_MENU_BUTTONS,
+        )
+        return HANDLE_CATEGORIES
+
+    else:
+        await context.bot.send_message(
+            text=textwrap.dedent("""<b>Значение должно быть числом</b>"""),
+            chat_id=update.effective_chat.id,
+            parse_mode=ParseMode.HTML,
+        )
+
+        return HANDLE_REGISTER_CAR_REGION
 
 
 async def add_cart(update, context):
@@ -413,16 +626,19 @@ async def remove_product(update, context):
 
 async def handle_user_payment(update, context):
     order_info = await get_product_info_for_payment(context)
+
     chat_id = update.effective_user.id
-    title = 'Оплата товаров "Магазин в Телеграме"'
-    description = order_info["products_info"]
-    payload = "telegram-store"
-    currency = "RUB"
     price = order_info["total_order_price"]
-    payment_token = settings.PAYMENT_TOKEN
     prices = [LabeledPrice("Оплата товаров", int(price) * 100)]
+
     await context.bot.send_invoice(
-        chat_id, title, description, payload, payment_token, currency, prices
+        chat_id=chat_id,
+        title='Оплата услуг "iPark"',
+        description=order_info["products_info"],
+        payload="telegram-store",
+        provider_token=settings.PAYMENT_TOKEN,
+        currency="KZT",
+        prices=prices,
     )
     return HANDLE_USER_REPLY
 
@@ -438,6 +654,7 @@ async def pre_checkout_callback(update, context):
 
 async def successful_payment_callback(update, context):
     reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
+
     if await create_order(context):
         await upload_to_exel()
         context.user_data["cart"] = None
@@ -477,6 +694,7 @@ async def handle_faq(update, context):
     """handle faq"""
     text = "<b>Часто задаваемые вопросы:</b>"
     reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
+
     text_faq = await get_text_faq()
 
     await update.callback_query.answer()
@@ -504,7 +722,12 @@ def bot_starting():
     application = (
         Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
     )
-    application.job_queue.run_repeating(handle_mailing, interval=60, first=10)
+
+    if application.job_queue:
+        application.job_queue.run_repeating(
+            handle_mailing, interval=60, first=10
+        )
+
     uuid_pattern = settings.BASE_PATTERN
 
     conv_handler = ConversationHandler(
@@ -548,6 +771,15 @@ def bot_starting():
                 MessageHandler(
                     filters.SUCCESSFUL_PAYMENT, successful_payment_callback
                 ),
+            ],
+            HANDLE_REGISTER_CAR_NUMBER: [
+                MessageHandler(filters.TEXT, update_car_number),
+            ],
+            HANDLE_REGISTER_CAR_SERIAL_NUMBER: [
+                MessageHandler(filters.TEXT, update_car_serial_number),
+            ],
+            HANDLE_REGISTER_CAR_REGION: [
+                MessageHandler(filters.TEXT, update_car_number_region),
             ],
         },
         fallbacks=[

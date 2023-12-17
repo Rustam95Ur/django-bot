@@ -25,14 +25,8 @@ from orders.models import Category, Product
 
 
 @sync_to_async
-def get_clients():
-    clients = CommonUser.objects.all()
-    return [client.telegram_user_id for client in clients]
-
-
-@sync_to_async
-def create_client(telegram_user_id, first_name, last_name, username):
-    client = CommonUser.objects.get_or_create(
+def create_user(telegram_user_id, first_name, last_name, username):
+    user, created = CommonUser.objects.get_or_create(
         telegram_user_id=telegram_user_id,
         username=username,
         defaults={
@@ -41,7 +35,19 @@ def create_client(telegram_user_id, first_name, last_name, username):
             "username": username,
         },
     )
-    return client
+    return user
+
+
+@sync_to_async
+def update_user_car(telegram_user_id, update_dict):
+    CommonUser.objects.filter(
+        telegram_user_id=telegram_user_id,
+    ).update(**update_dict)
+    user = CommonUser.objects.filter(
+        telegram_user_id=telegram_user_id,
+    ).first()
+
+    return user
 
 
 @sync_to_async
