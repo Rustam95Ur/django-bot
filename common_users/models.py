@@ -10,12 +10,13 @@ from core.models.base import BaseUUIDModel
 from common_users.constants import (
     UserType,
 )
+from core.models.model_fields import AmountField
 
 
 class CommonUser(AbstractBaseUser, PermissionsMixin, BaseUUIDModel):
     """CommonUser"""
 
-    phone = PhoneNumberField(verbose_name=_("Phone"))
+    phone = PhoneNumberField(verbose_name=_("Phone"), null=True, blank=True)
     username = models.CharField(verbose_name=_("Username"), unique=True)
     user_type = models.PositiveSmallIntegerField(
         verbose_name=_("User type"),
@@ -82,3 +83,27 @@ class FAQ(BaseUUIDModel):
 
     def __str__(self):
         return f"{self.question}"
+
+
+class CommonUserPurchase(BaseUUIDModel):
+    """CommonUserPurchase"""
+
+    user = models.ForeignKey(
+        "common_users.CommonUser",
+        on_delete=models.CASCADE,
+        verbose_name=_("User"),
+        related_name="purchases",
+    )
+    product = models.ForeignKey(
+        "orders.Product",
+        on_delete=models.CASCADE,
+        verbose_name=_("Product"),
+        related_name="purchases",
+    )
+    quantity = models.IntegerField(verbose_name=_("Quantity"))
+    amount = AmountField(verbose_name=_("Amount"))
+
+    class Meta:
+        verbose_name = "CommonUser purchase"
+        verbose_name_plural = "CommonUser purchases"
+        db_table = "common_user_purchases"

@@ -20,13 +20,21 @@ class Product(BaseNameModel):
 
     category = models.ForeignKey(
         Category,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
         verbose_name=_("Category"),
         related_name="products",
-        null=True,
     )
     is_active = models.BooleanField(verbose_name=_("Is active"), default=True)
     is_free = models.BooleanField(verbose_name=_("Is free"), default=True)
+    lessor = models.ForeignKey(
+        "common_users.CommonUser",
+        on_delete=models.SET_NULL,
+        verbose_name=_("Lessor"),
+        related_name="products",
+        null=True,
+        blank=True,
+    )
+    expiration_time = models.TimeField(null=True, blank=True)
 
     class Meta:
         verbose_name = _("Product")

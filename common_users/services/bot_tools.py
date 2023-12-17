@@ -1,4 +1,5 @@
 import textwrap as tw
+from datetime import datetime, timedelta
 
 from django.conf import settings
 from django.core.paginator import Paginator
@@ -6,26 +7,15 @@ from django.core.paginator import Paginator
 from asgiref.sync import sync_to_async
 from django.db.models import Count, F
 
-from common_users.models import CommonUser, FAQ
+from common_users.models import CommonUser, FAQ, CommonUserPurchase
 from common_users.services.cart import Cart
 
 from orders.models import Category, Product
 
 
-# from faq.models import FAQ
-# from mailings.models import Mailing
-# from clients.models import Client
-# from products.models import (
-#     Category,
-#     Product,
-#     Order,
-#     OrderItem
-# )
-# from cart.cart import Cart
-
-
 @sync_to_async
 def create_user(telegram_user_id, first_name, last_name, username):
+    """create user"""
     user, created = CommonUser.objects.get_or_create(
         telegram_user_id=telegram_user_id,
         username=username,
@@ -40,6 +30,7 @@ def create_user(telegram_user_id, first_name, last_name, username):
 
 @sync_to_async
 def update_user_car(telegram_user_id, update_dict):
+    """update user car"""
     CommonUser.objects.filter(
         telegram_user_id=telegram_user_id,
     ).update(**update_dict)
@@ -82,6 +73,7 @@ def get_categories(page_number):
 
 @sync_to_async
 def get_category(category_id):
+    """get category"""
     category = Category.objects.get(id=category_id)
     return category
 
@@ -139,6 +131,8 @@ def get_cart_info(context):
 
 @sync_to_async
 def get_cart_products_info(context):
+    """get cart products info"""
+
     cart = Cart(context)
     products = []
     products_info = ""
@@ -169,6 +163,7 @@ def get_cart_products_info(context):
 
 @sync_to_async
 def get_product_info_for_payment(context):
+    """get product info for payment"""
     products_in_cart = get_cart_info(context)
     total_order_price = products_in_cart.get_total_price()
     products_info = ""
@@ -195,35 +190,39 @@ def get_product_info_for_payment(context):
 
 
 @sync_to_async
-def create_order(context):
+def create_purchase(context):
+    """create order"""
     cart = Cart(context)
     telegram_user_id = context.user_data["telegram_user_id"]
-    client = CommonUser.objects.get(telegram_user_id=telegram_user_id)
+    user = CommonUser.objects.get(telegram_user_id=telegram_user_id)
 
-    order = CommonUser.objects.create(
-        client=client,
-    )
     order_elements = []
+    update_product = []
 
     for order_product in cart:
         product = order_product["product"]
         quantity = order_product["quantity"]
-        order_element = CommonUser(
-            order=order,
+        order_element = CommonUserPurchase(
+            user=user,
             product=product,
             quantity=quantity,
+            amount=order_product["total_price"],
         )
+
+        product.is_free = False
+        product.lessor = user
+        product.expiration_time = datetime.now() + timedelta(
+            minutes=settings.START_MINUTE
+        )
+
+        update_product.append(product)
         order_elements.append(order_element)
 
-    CommonUser.objects.bulk_create(order_elements)
-
+    CommonUserPurchase.objects.bulk_create(order_elements)
+    Product.objects.bulk_update(
+        update_product, ["is_free", "lessor", "expiration_time"]
+    )
     return True
-
-
-@sync_to_async
-def upload_to_exel():
-    CommonUser.objects.select_related("client")
-    # settings.ORDERS_FILE_PATH
 
 
 @sync_to_async
@@ -256,6 +255,7 @@ def get_text_faq():
 
 
 def build_menu(buttons, n_cols, header_buttons=None, footer_buttons=None):
+    """build menu"""
     menu = [buttons[i : i + n_cols] for i in range(0, len(buttons), n_cols)]
     if header_buttons:
         menu.insert(0, header_buttons)

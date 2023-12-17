@@ -10,6 +10,8 @@ from telegram import (
     InlineKeyboardMarkup,
     LabeledPrice,
     ReplyKeyboardRemove,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
 )
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -26,7 +28,7 @@ from common_users.services.bot_tools import (
     add_product_to_cart,
     build_menu,
     create_user,
-    create_order,
+    create_purchase,
     get_cart_products_info,
     get_categories,
     get_mailing,
@@ -36,7 +38,6 @@ from common_users.services.bot_tools import (
     get_products,
     get_text_faq,
     remove_product_from_cart,
-    upload_to_exel,
     update_user_car,
 )
 
@@ -53,7 +54,8 @@ from common_users.services.bot_tools import (
     HANDLE_REGISTER_CAR_NUMBER,
     HANDLE_REGISTER_CAR_SERIAL_NUMBER,
     HANDLE_REGISTER_CAR_REGION,
-) = range(12)
+    HANDLE_PHONE,
+) = range(13)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -82,24 +84,30 @@ MAIN_MENU_BUTTONS = InlineKeyboardMarkup(
 )
 
 
-def check_car_info_and_phone(user, update):
+def check_car_info_and_phone(user):
     """check car info and phone"""
     return_text = None
+    is_phone = False
+    handle = None
 
     if user.car_number is None:
         return_text = "<b>Заполните номер машины</b>"
-        return HANDLE_REGISTER_CAR_NUMBER, return_text
+        handle = HANDLE_REGISTER_CAR_NUMBER
 
     elif user.car_serial_number is None:
         return_text = "<b>Буквы на номере автомобиля</b>"
-        return HANDLE_REGISTER_CAR_SERIAL_NUMBER, return_text
+        handle = HANDLE_REGISTER_CAR_SERIAL_NUMBER
 
     elif user.car_number_region is None:
         return_text = "<b>Заполните регион машины</b>"
+        handle = HANDLE_REGISTER_CAR_REGION
 
-        return HANDLE_REGISTER_CAR_REGION, return_text
+    elif user.phone is None:
+        return_text = "<b>Отправьте номер телефона</b>"
+        handle = HANDLE_PHONE
+        is_phone = True
 
-    return False, return_text
+    return handle, return_text, is_phone
 
 
 async def get_chat_member(update, context):
@@ -148,15 +156,30 @@ async def start(update, context):
             last_name=last_name,
             username=username,
         )
-        check_user_data, check_text = check_car_info_and_phone(
-            user=user, update=update
+        check_user_data, check_text, is_phone = check_car_info_and_phone(
+            user=user
         )
 
         if check_user_data:
-            await update.message.reply_text(
-                textwrap.dedent(check_text),
-                parse_mode=ParseMode.HTML,
-            )
+            if is_phone:
+                button_phone = KeyboardButton(
+                    text="Отправить номер телефона 📱️", request_contact=True
+                )
+                keyboard = ReplyKeyboardMarkup(
+                    keyboard=[[button_phone]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True,
+                )
+                await update.message.reply_text(
+                    text=textwrap.dedent(check_text),
+                    reply_markup=keyboard,
+                )
+
+            else:
+                await update.message.reply_text(
+                    text=textwrap.dedent(check_text),
+                    parse_mode=ParseMode.HTML,
+                )
             return check_user_data
 
         await update.message.reply_text(
@@ -392,15 +415,31 @@ async def update_car_number(update, context):
                 update_dict={"car_number": car_number},
             )
 
-            check_user_data, check_text = check_car_info_and_phone(
-                user=user, update=update
+            check_user_data, check_text, is_phone = check_car_info_and_phone(
+                user=user
             )
 
             if check_user_data:
-                await update.message.reply_text(
-                    textwrap.dedent(check_text),
-                    parse_mode=ParseMode.HTML,
-                )
+                if is_phone:
+                    button_phone = KeyboardButton(
+                        text="Отправить номер телефона 📱️",
+                        request_contact=True,
+                    )
+                    keyboard = ReplyKeyboardMarkup(
+                        keyboard=[[button_phone]],
+                        resize_keyboard=True,
+                        one_time_keyboard=True,
+                    )
+                    await update.message.reply_text(
+                        text=textwrap.dedent(check_text),
+                        reply_markup=keyboard,
+                    )
+
+                else:
+                    await update.message.reply_text(
+                        text=textwrap.dedent(check_text),
+                        parse_mode=ParseMode.HTML,
+                    )
                 return check_user_data
 
             await update.message.reply_text(
@@ -459,15 +498,30 @@ async def update_car_serial_number(update, context):
             update_dict={"car_serial_number": car_serial_number},
         )
 
-        check_user_data, check_text = check_car_info_and_phone(
-            user=user, update=update
+        check_user_data, check_text, is_phone = check_car_info_and_phone(
+            user=user
         )
 
         if check_user_data:
-            await update.message.reply_text(
-                textwrap.dedent(check_text),
-                parse_mode=ParseMode.HTML,
-            )
+            if is_phone:
+                button_phone = KeyboardButton(
+                    text="Отправить номер телефона 📱️", request_contact=True
+                )
+                keyboard = ReplyKeyboardMarkup(
+                    keyboard=[[button_phone]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True,
+                )
+                await update.message.reply_text(
+                    text=textwrap.dedent(check_text),
+                    reply_markup=keyboard,
+                )
+
+            else:
+                await update.message.reply_text(
+                    text=textwrap.dedent(check_text),
+                    parse_mode=ParseMode.HTML,
+                )
             return check_user_data
 
         await update.message.reply_text(
@@ -496,9 +550,7 @@ async def update_car_number_region(update, context):
     if re.match(r"[0-9]", car_region):
         if int(car_region) == 0 or len(car_region) > 2:
             await context.bot.send_message(
-                text=textwrap.dedent(
-                    """<b>Введенный регион не существует</b>"""
-                ),
+                text=textwrap.dedent("b>Введенный регион не существует</b>"),
                 chat_id=update.effective_chat.id,
                 parse_mode=ParseMode.HTML,
             )
@@ -509,15 +561,30 @@ async def update_car_number_region(update, context):
             update_dict={"car_number_region": int(car_region)},
         )
 
-        check_user_data, check_text = check_car_info_and_phone(
-            user=user, update=update
+        check_user_data, check_text, is_phone = check_car_info_and_phone(
+            user=user
         )
 
         if check_user_data:
-            await update.message.reply_text(
-                textwrap.dedent(check_text),
-                parse_mode=ParseMode.HTML,
-            )
+            if is_phone:
+                button_phone = KeyboardButton(
+                    text="Отправить номер телефона 📱️", request_contact=True
+                )
+                keyboard = ReplyKeyboardMarkup(
+                    keyboard=[[button_phone]],
+                    resize_keyboard=True,
+                    one_time_keyboard=True,
+                )
+                await update.message.reply_text(
+                    text=textwrap.dedent(check_text),
+                    reply_markup=keyboard,
+                )
+
+            else:
+                await update.message.reply_text(
+                    text=textwrap.dedent(check_text),
+                    parse_mode=ParseMode.HTML,
+                )
             return check_user_data
 
         await update.message.reply_text(
@@ -539,12 +606,47 @@ async def update_car_number_region(update, context):
 
     else:
         await context.bot.send_message(
-            text=textwrap.dedent("""<b>Значение должно быть числом</b>"""),
+            text=textwrap.dedent("<b>Значение должно быть числом</b>"),
             chat_id=update.effective_chat.id,
             parse_mode=ParseMode.HTML,
         )
 
         return HANDLE_REGISTER_CAR_REGION
+
+
+async def update_user_phone(update, context):
+    phone = update.message.contact.phone_number
+
+    user = await update_user_car(
+        telegram_user_id=update.effective_user.id,
+        update_dict={"phone": phone},
+    )
+
+    check_user_data, check_text, is_phone = check_car_info_and_phone(user=user)
+
+    if check_user_data:
+        await update.message.reply_text(
+            textwrap.dedent(check_text),
+            parse_mode=ParseMode.HTML,
+        )
+        return check_user_data
+
+    await update.message.reply_text(
+        textwrap.dedent(
+            f"""
+            <b>Здравствуйте {update.effective_user.first_name}!</b>
+             Добро пожаловать "iPark"
+            """
+        ),
+        parse_mode=ParseMode.HTML,
+    )
+
+    await update.message.reply_text(
+        text="Выберете действие:",
+        parse_mode=ParseMode.HTML,
+        reply_markup=MAIN_MENU_BUTTONS,
+    )
+    return HANDLE_CATEGORIES
 
 
 async def add_cart(update, context):
@@ -667,11 +769,12 @@ async def successful_payment_callback(update, context):
     """successful payment callback"""
     reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
 
-    if await create_order(context):
-        await upload_to_exel()
+    if await create_purchase(context):
         context.user_data["cart"] = None
+
         await update.message.reply_text(
-            "Успешно! Ожидайте доставку.", reply_markup=reply_markup
+            f"""Бронь успешно поставлена, При занятии парковочного места необходимо нажать кнопку «занял место». Бронь держится {settings.START_MINUTE} минут, в случае если не успеете уложиться в данное время, бронь снимается.""",
+            reply_markup=reply_markup,
         )
     return HANDLE_MENU
 
@@ -792,6 +895,9 @@ def bot_starting():
             ],
             HANDLE_REGISTER_CAR_REGION: [
                 MessageHandler(filters.TEXT, update_car_number_region),
+            ],
+            HANDLE_PHONE: [
+                MessageHandler(filters.CONTACT, update_user_phone),
             ],
         },
         fallbacks=[
