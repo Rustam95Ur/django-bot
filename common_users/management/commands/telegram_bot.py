@@ -103,8 +103,11 @@ def check_car_info_and_phone(user, update):
 
 
 async def get_chat_member(update, context):
+    """get chat member"""
+
     subscription_channel_id = 1
     subscription_channel_link = "Test"
+
     user_status_chanel = await context.bot.get_chat_member(
         chat_id=subscription_channel_id, user_id=update.effective_chat.id
     )
@@ -177,6 +180,7 @@ async def start(update, context):
 
 
 async def show_main_page(update, context):
+    """show main page"""
     context.user_data["current_page"] = 1
 
     menu = await get_menu(context.user_data["current_page"])
@@ -188,6 +192,7 @@ async def show_main_page(update, context):
 
 
 async def show_next_page(update, context):
+    """show next page"""
     context.user_data["current_page"] += 1
     menu = await get_menu(context.user_data["current_page"])
     await update.callback_query.answer()
@@ -197,6 +202,7 @@ async def show_next_page(update, context):
 
 
 async def show_previous_page(update, context):
+    """show previous page"""
     context.user_data["current_page"] -= 1
     menu = await get_menu(context.user_data["current_page"])
     await update.callback_query.answer()
@@ -542,6 +548,7 @@ async def update_car_number_region(update, context):
 
 
 async def add_cart(update, context):
+    """add cart"""
     if update.callback_query.data == "Категории":
         await show_main_page(update, context)
         return HANDLE_CATEGORIES
@@ -581,6 +588,7 @@ async def add_cart(update, context):
 
 
 async def show_cart_info(update, context):
+    """show cart info"""
     products = await get_cart_products_info(context)
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=products)
@@ -616,6 +624,7 @@ async def handle_cart(update, context):
 
 
 async def remove_product(update, context):
+    """remove product"""
     product_id = update.callback_query.data
     context.user_data["product_id"] = product_id
     await remove_product_from_cart(context)
@@ -625,6 +634,7 @@ async def remove_product(update, context):
 
 
 async def handle_user_payment(update, context):
+    """handle user payment"""
     order_info = await get_product_info_for_payment(context)
 
     chat_id = update.effective_user.id
@@ -644,6 +654,7 @@ async def handle_user_payment(update, context):
 
 
 async def pre_checkout_callback(update, context):
+    """pre checkout callback"""
     query = update.pre_checkout_query
     if query.invoice_payload != "telegram-store":
         await query.answer(ok=False, error_message="Something went wrong...")
@@ -653,6 +664,7 @@ async def pre_checkout_callback(update, context):
 
 
 async def successful_payment_callback(update, context):
+    """successful payment callback"""
     reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
 
     if await create_order(context):
