@@ -196,13 +196,13 @@ def create_purchase(context):
     telegram_user_id = context.user_data["telegram_user_id"]
     user = CommonUser.objects.get(telegram_user_id=telegram_user_id)
 
-    order_elements = []
+    purchase_elements = []
     update_product = []
 
     for order_product in cart:
         product = order_product["product"]
         quantity = order_product["quantity"]
-        order_element = CommonUserPurchase(
+        purchase = CommonUserPurchase(
             user=user,
             product=product,
             quantity=quantity,
@@ -211,30 +211,71 @@ def create_purchase(context):
 
         product.is_free = False
         product.lessor = user
-        product.expiration_time = datetime.now() + timedelta(
+        product.expiration_date = datetime.now() + timedelta(
             minutes=settings.START_MINUTE
         )
 
         update_product.append(product)
-        order_elements.append(order_element)
+        purchase_elements.append(purchase)
 
-    CommonUserPurchase.objects.bulk_create(order_elements)
+    CommonUserPurchase.objects.bulk_create(purchase_elements)
     Product.objects.bulk_update(
-        update_product, ["is_free", "lessor", "expiration_time"]
+        update_product, ["is_free", "lessor", "expiration_date"]
     )
     return True
 
 
 @sync_to_async
-def get_mailing():
-    current_mailings = CommonUser.objects.filter()
-    return [mailing for mailing in current_mailings]
+def get_purchases(context):
+    """returns purchases"""
+    telegram_user_id = context.user_data["telegram_user_id"]
+    purchases = CommonUserPurchase.objects.filter(
+        user__telegram_user_id=telegram_user_id,
+        is_completed=False,
+    ).annotate(product_name=F("product__name"))
+
+    return [purchase for purchase in purchases]
 
 
 @sync_to_async
-def change_status_mailing(mailing):
-    mailing.is_finish = True
-    mailing.save()
+def get_user_products(context):
+    """returns user products"""
+    telegram_user_id = context.user_data["telegram_user_id"]
+    products = Product.objects.filter(
+        lessor__telegram_user_id=telegram_user_id,
+    )
+
+    return [product for product in products]
+
+
+@sync_to_async
+def complete_purchase(purchase_id):
+    """complete purchase"""
+    purchase = CommonUserPurchase.objects.get(id=purchase_id)
+
+    product = purchase.product
+
+    product.expiration_date = datetime.now() + timedelta(
+        hours=purchase.quantity
+    )
+    product.expiration_date += timedelta(minutes=settings.END_MINUTE)
+    product.is_took_place = True
+    product.save()
+
+    purchase.is_completed = True
+    purchase.save()
+
+    expiration_date = product.expiration_date - timedelta(
+        minutes=settings.END_MINUTE
+    )
+    return expiration_date.strftime("%d %B %Y, %H:%M:%S")
+
+
+@sync_to_async
+def update_product_expiration_date():
+    Product.objects.filter(
+        is_free=False, lessor__isnull=False, expiration_date__lt=datetime.now()
+    ).update(is_free=True, lessor=None, expiration_date=None)
 
 
 @sync_to_async

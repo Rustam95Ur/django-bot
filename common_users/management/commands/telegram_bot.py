@@ -31,7 +31,7 @@ from common_users.services.bot_tools import (
     create_purchase,
     get_cart_products_info,
     get_categories,
-    get_mailing,
+    update_product_expiration_date,
     get_product_detail,
     get_product_info_for_payment,
     get_product_name,
@@ -39,6 +39,9 @@ from common_users.services.bot_tools import (
     get_text_faq,
     remove_product_from_cart,
     update_user_car,
+    get_purchases,
+    complete_purchase,
+    get_user_products,
 )
 
 (
@@ -55,7 +58,9 @@ from common_users.services.bot_tools import (
     HANDLE_REGISTER_CAR_SERIAL_NUMBER,
     HANDLE_REGISTER_CAR_REGION,
     HANDLE_PHONE,
-) = range(13)
+    HANDLE_TOOK_PLACE,
+    HANDLE_PURCHASES,
+) = range(15)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -64,7 +69,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-BACK_BUTTON = InlineKeyboardButton("Назад", callback_data="back")
+BACK_BUTTON = InlineKeyboardButton(text="Назад", callback_data="back")
 
 MAIN_MENU_BUTTONS = InlineKeyboardMarkup(
     [
@@ -73,7 +78,8 @@ MAIN_MENU_BUTTONS = InlineKeyboardMarkup(
                 text="📋 Свободные места", callback_data="catalog"
             )
         ],
-        [InlineKeyboardButton(text="🛒 Мои брони", callback_data="cart")],
+        [InlineKeyboardButton(text="🛒 Моя корзина", callback_data="cart")],
+        [InlineKeyboardButton(text="🅿️ Мои брони", callback_data="purchases")],
         [InlineKeyboardButton(text="🗣 FAQ", callback_data="faq")],
         [
             InlineKeyboardButton(
@@ -240,7 +246,9 @@ async def get_menu(current_page):
     categories_data = await get_categories(page_number=current_page)
 
     keyboard = [
-        InlineKeyboardButton(category.name, callback_data=str(category.id))
+        InlineKeyboardButton(
+            text=category.name, callback_data=str(category.id)
+        )
         for category in categories_data.get("categories")
     ]
 
@@ -248,16 +256,16 @@ async def get_menu(current_page):
 
     if categories_data.get("has_previous"):
         footer_buttons.insert(
-            0, InlineKeyboardButton("<<<", callback_data="prev")
+            0, InlineKeyboardButton(text="<<<", callback_data="prev")
         )
 
     if categories_data.get("has_next"):
         footer_buttons.append(
-            InlineKeyboardButton(">>>", callback_data="next")
+            InlineKeyboardButton(text=">>>", callback_data="next")
         )
 
     footer_buttons.append(
-        InlineKeyboardButton("Главное меню", callback_data="main_menu")
+        InlineKeyboardButton(text="Главное меню", callback_data="main_menu")
     )
 
     return InlineKeyboardMarkup(
@@ -290,7 +298,13 @@ async def handle_products(update, context):
 
     for product in products_category:
         put_cart_button = InlineKeyboardMarkup(
-            [[InlineKeyboardButton("Выбрать", callback_data=str(product.id))]]
+            [
+                [
+                    InlineKeyboardButton(
+                        text="Выбрать", callback_data=str(product.id)
+                    )
+                ]
+            ]
         )
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -302,7 +316,9 @@ async def handle_products(update, context):
     keyboard = [
         [
             BACK_BUTTON,
-            InlineKeyboardButton("Главное меню", callback_data="main_menu"),
+            InlineKeyboardButton(
+                text="Главное меню", callback_data="main_menu"
+            ),
         ]
     ]
 
@@ -329,7 +345,9 @@ async def handle_product_detail(update, context):
     keyboard = []
 
     for i in range(1, 4):
-        keyboard.append(InlineKeyboardButton(f"{i} час(а)", callback_data=i))
+        keyboard.append(
+            InlineKeyboardButton(text=f"{i} час(а)", callback_data=i)
+        )
 
     keyboard.append(BACK_BUTTON)
     keyboard_groups = build_menu(keyboard, n_cols=1)
@@ -370,7 +388,7 @@ async def check_quantity(update, context):
                 [
                     BACK_BUTTON,
                     InlineKeyboardButton(
-                        "Подтвердить", callback_data="confirm"
+                        text="Подтвердить", callback_data="confirm"
                     ),
                 ]
             ]
@@ -651,7 +669,7 @@ async def update_user_phone(update, context):
 
 async def add_cart(update, context):
     """add cart"""
-    if update.callback_query.data == "Категории":
+    if update.callback_query.data == "cart":
         await show_main_page(update, context)
         return HANDLE_CATEGORIES
 
@@ -669,13 +687,13 @@ async def add_cart(update, context):
         for position, product in enumerate(products, start=1):
             keyboard.append(
                 InlineKeyboardButton(
-                    f"Удалить позицию №{position}",
+                    text=f"Удалить позицию №{position}",
                     callback_data=str(product.id),
                 )
             )
         keyboard_groups = build_menu(keyboard, n_cols=2)
         keyboard_groups.append(
-            [InlineKeyboardButton("Оплатить", callback_data="payment")]
+            [InlineKeyboardButton(text="Оплатить", callback_data="payment")]
         )
         keyboard_groups.append(back)
 
@@ -691,9 +709,38 @@ async def add_cart(update, context):
 
 async def show_cart_info(update, context):
     """show cart info"""
-    products = await get_cart_products_info(context)
+    products = await get_purchases(context)
     await update.callback_query.answer()
     await update.callback_query.edit_message_text(text=products)
+
+
+async def show_purchases_info(update, context):
+    """show purchases info"""
+    products = await get_user_products(context)
+
+    if len(products) == 0:
+        await update.callback_query.answer("Брони отсутствуют")
+        return
+
+    product_info = ""
+
+    for position, product in enumerate(products, start=1):
+        product_info += textwrap.dedent(
+            f"""
+                №{position}. 
+                <i>Парковочное место:</i> <b>{product.name}</b>
+                <i>Время выезда:</i> {product.str_expiration_date}
+                """
+        )
+
+    reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
+
+    await update.callback_query.edit_message_text(
+        text=product_info,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML,
+    )
+    return HANDLE_MENU
 
 
 async def handle_cart(update, context):
@@ -707,13 +754,13 @@ async def handle_cart(update, context):
         for position, product in enumerate(products, start=1):
             keyboard.append(
                 InlineKeyboardButton(
-                    f"Удалить позицию №{position}",
+                    text=f"Удалить позицию №{position}",
                     callback_data=str(product.id),
                 )
             )
         keyboard_groups = build_menu(keyboard, n_cols=2)
         keyboard_groups.append(
-            [InlineKeyboardButton("Оплатить", callback_data="payment")]
+            [InlineKeyboardButton(text="Оплатить", callback_data="payment")]
         )
         keyboard_groups.append([BACK_BUTTON])
         reply_markup = InlineKeyboardMarkup(keyboard_groups)
@@ -767,20 +814,67 @@ async def pre_checkout_callback(update, context):
 
 async def successful_payment_callback(update, context):
     """successful payment callback"""
-    reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
 
     if await create_purchase(context):
         context.user_data["cart"] = None
 
+        text = f"""
+        <b>Бронь успешно поставлена</b>
+        При занятии парковочного места необходимо нажать кнопку «занял место».
+        Бронь держится {settings.START_MINUTE} минут, в случае если не 
+        успеете уложиться в данное время, бронь снимается."""
+
         await update.message.reply_text(
-            f"""Бронь успешно поставлена, При занятии парковочного места необходимо нажать кнопку «занял место». Бронь держится {settings.START_MINUTE} минут, в случае если не успеете уложиться в данное время, бронь снимается.""",
-            reply_markup=reply_markup,
+            text=textwrap.dedent(text), parse_mode=ParseMode.HTML
         )
+
+        purchases = await get_purchases(context)
+
+        for purchase in purchases:
+            purchase_button = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            text="Занял место", callback_data=str(purchase.id)
+                        )
+                    ]
+                ]
+            )
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=textwrap.dedent(f"<b>{purchase.product_name}</b>"),
+                reply_markup=purchase_button,
+                parse_mode=ParseMode.HTML,
+            )
+
+    return HANDLE_TOOK_PLACE
+
+
+async def took_place(update, context):
+    purchase_id = update.callback_query.data
+    expiration_date = await complete_purchase(purchase_id)
+
+    text = f"<b>Место занято ✅ </b>\nВремя выезда {expiration_date}"
+
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [
+                BACK_BUTTON,
+            ]
+        ]
+    )
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text=textwrap.dedent(text),
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML,
+    )
     return HANDLE_MENU
 
 
-async def handle_mailing(context):
-    await get_mailing()
+async def handle_check_product_expiration_date(context):
+    await update_product_expiration_date()
     # if mailings:
     #     for mailing in mailings:
     #         start_time = mailing.start_date.strftime('%m-%d-%Y %H:%M')
@@ -833,14 +927,12 @@ async def handle_error(update, context):
 
 def bot_starting():
     """bot stat command"""
-
-    application = (
-        Application.builder().token(settings.TELEGRAM_BOT_TOKEN).build()
-    )
+    bot_token = settings.TELEGRAM_BOT_TOKEN
+    application = Application.builder().token(bot_token).build()
 
     if application.job_queue:
         application.job_queue.run_repeating(
-            handle_mailing, interval=60, first=10
+            handle_check_product_expiration_date, interval=60, first=10
         )
 
     uuid_pattern = settings.BASE_PATTERN
@@ -858,6 +950,9 @@ def bot_starting():
                 CallbackQueryHandler(start, pattern=r"main_menu"),
                 CallbackQueryHandler(handle_cart, pattern=r"cart"),
                 CallbackQueryHandler(handle_faq, pattern=r"faq"),
+                CallbackQueryHandler(
+                    show_purchases_info, pattern=r"purchases"
+                ),
                 CallbackQueryHandler(handle_categories),
             ],
             HANDLE_PRODUCTS: [
@@ -898,6 +993,14 @@ def bot_starting():
             ],
             HANDLE_PHONE: [
                 MessageHandler(filters.CONTACT, update_user_phone),
+            ],
+            HANDLE_TOOK_PLACE: [
+                CallbackQueryHandler(took_place, pattern=uuid_pattern),
+            ],
+            HANDLE_PURCHASES: [
+                CallbackQueryHandler(
+                    show_purchases_info, pattern=r"purchases"
+                ),
             ],
         },
         fallbacks=[

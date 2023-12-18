@@ -102,6 +102,9 @@ class CommonUserPurchase(BaseUUIDModel):
     )
     quantity = models.IntegerField(verbose_name=_("Quantity"))
     amount = AmountField(verbose_name=_("Amount"))
+    is_completed = models.BooleanField(
+        verbose_name=_("Is completed"), default=False
+    )
 
     class Meta:
         verbose_name = "CommonUser purchase"
