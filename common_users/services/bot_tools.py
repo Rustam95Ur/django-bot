@@ -242,7 +242,7 @@ def get_user_products(context):
     """returns user products"""
     telegram_user_id = context.user_data["telegram_user_id"]
     products = Product.objects.filter(
-        lessor__telegram_user_id=telegram_user_id,
+        lessor__telegram_user_id=telegram_user_id, is_took_place=True
     )
 
     return [product for product in products]

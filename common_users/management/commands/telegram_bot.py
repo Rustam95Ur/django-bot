@@ -179,6 +179,7 @@ async def start(update, context):
                 await update.message.reply_text(
                     text=textwrap.dedent(check_text),
                     reply_markup=keyboard,
+                    parse_mode=ParseMode.HTML,
                 )
 
             else:
@@ -451,6 +452,7 @@ async def update_car_number(update, context):
                     await update.message.reply_text(
                         text=textwrap.dedent(check_text),
                         reply_markup=keyboard,
+                        parse_mode=ParseMode.HTML,
                     )
 
                 else:
@@ -533,6 +535,7 @@ async def update_car_serial_number(update, context):
                 await update.message.reply_text(
                     text=textwrap.dedent(check_text),
                     reply_markup=keyboard,
+                    parse_mode=ParseMode.HTML,
                 )
 
             else:
@@ -596,6 +599,7 @@ async def update_car_number_region(update, context):
                 await update.message.reply_text(
                     text=textwrap.dedent(check_text),
                     reply_markup=keyboard,
+                    parse_mode=ParseMode.HTML,
                 )
 
             else:
@@ -633,6 +637,7 @@ async def update_car_number_region(update, context):
 
 
 async def update_user_phone(update, context):
+    """update user phone"""
     phone = update.message.contact.phone_number
 
     user = await update_user_car(
@@ -724,13 +729,32 @@ async def show_purchases_info(update, context):
 
     product_info = ""
 
+    purchases = await get_purchases(context)
+
+    for purchase in purchases:
+        purchase_button = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        text="Занял место", callback_data=str(purchase.id)
+                    )
+                ]
+            ]
+        )
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=textwrap.dedent(f"<b>{purchase.product_name}</b>"),
+            reply_markup=purchase_button,
+            parse_mode=ParseMode.HTML,
+        )
+
     for position, product in enumerate(products, start=1):
         product_info += textwrap.dedent(
             f"""
-                №{position}. 
-                <i>Парковочное место:</i> <b>{product.name}</b>
-                <i>Время выезда:</i> {product.str_expiration_date}
-                """
+               №{position}. 
+               <i>Парковочное место:</i> <b>{product.name}</b>
+               <i>Время выезда:</i> {product.str_expiration_date}
+            """
         )
 
     reply_markup = InlineKeyboardMarkup([[BACK_BUTTON]])
@@ -740,7 +764,7 @@ async def show_purchases_info(update, context):
         reply_markup=reply_markup,
         parse_mode=ParseMode.HTML,
     )
-    return HANDLE_MENU
+    return HANDLE_TOOK_PLACE
 
 
 async def handle_cart(update, context):
@@ -846,6 +870,22 @@ async def successful_payment_callback(update, context):
                 reply_markup=purchase_button,
                 parse_mode=ParseMode.HTML,
             )
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                text="Главное меню", callback_data="main_menu"
+            ),
+        ]
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await context.bot.send_message(
+        text="В случай возникновений проблем обратиться к тех. поддержку",
+        chat_id=update.effective_chat.id,
+        reply_markup=reply_markup,
+    )
 
     return HANDLE_TOOK_PLACE
 
@@ -996,6 +1036,8 @@ def bot_starting():
             ],
             HANDLE_TOOK_PLACE: [
                 CallbackQueryHandler(took_place, pattern=uuid_pattern),
+                CallbackQueryHandler(start, pattern=r"back"),
+                CallbackQueryHandler(start, pattern=r"main_menu"),
             ],
             HANDLE_PURCHASES: [
                 CallbackQueryHandler(
