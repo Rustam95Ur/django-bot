@@ -42,6 +42,7 @@ from common_users.services.bot_tools import (
     get_purchases,
     complete_purchase,
     get_user_products,
+    get_admins,
 )
 
 (
@@ -60,7 +61,8 @@ from common_users.services.bot_tools import (
     HANDLE_PHONE,
     HANDLE_TOOK_PLACE,
     HANDLE_PURCHASES,
-) = range(15)
+    HANDLE_TECH_SUPPORT,
+) = range(16)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -142,10 +144,21 @@ async def start(update, context):
     text = "Выберете действие:"
 
     if context.user_data.get(START_OVER):
-        await update.callback_query.answer()
-        await update.callback_query.edit_message_text(
-            text=text, reply_markup=MAIN_MENU_BUTTONS
-        )
+        try:
+            callback_query = update.callback_query
+            if callback_query:
+                await callback_query.edit_message_text(
+                    text="Выберете действие:", reply_markup=MAIN_MENU_BUTTONS
+                )
+            else:
+                # Handle the case where callback_query is None
+                await context.bot.send_message(
+                    chat_id=update.effective_chat.id,
+                    text="Выберете действие:",
+                    reply_markup=MAIN_MENU_BUTTONS,
+                )
+        except Exception as e:
+            print(f"Error handling start command: {e}")
 
     # elif await get_chat_member(update, context):
     #     return
@@ -767,6 +780,34 @@ async def show_purchases_info(update, context):
     return HANDLE_TOOK_PLACE
 
 
+async def tech_support(update, context):
+    """Техподдержка"""
+
+    admins = await get_admins()
+
+    keyboard = []
+
+    for admin in admins:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    text="Написать", url=f"https://t.me/{admin.username}"
+                )
+            ]
+        )
+
+    keyboard.append([InlineKeyboardButton(text="Назад", callback_data="back")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.callback_query.edit_message_text(
+        text="Список пользователей тех. поддержки",
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.HTML,
+    )
+    return HANDLE_TECH_SUPPORT
+
+
 async def handle_cart(update, context):
     """handle cart"""
     if "cart" not in context.user_data:
@@ -915,19 +956,6 @@ async def took_place(update, context):
 
 async def handle_check_product_expiration_date(context):
     await update_product_expiration_date()
-    # if mailings:
-    #     for mailing in mailings:
-    #         start_time = mailing.start_date.strftime('%m-%d-%Y %H:%M')
-    #         now_time = timezone.now().strftime('%m-%d-%Y %H:%M')
-    #         if start_time == now_time:
-    #             clients = await get_clients()
-    #             for client in clients:
-    #                 await context.bot.send_message(
-    #                     text=mailing.text,
-    #                     chat_id=client,
-    #                     parse_mode=ParseMode.HTML
-    #                 )
-    #             await change_status_mailing(mailing)
 
 
 async def cancel(update, context):
@@ -993,6 +1021,7 @@ def bot_starting():
                 CallbackQueryHandler(
                     show_purchases_info, pattern=r"purchases"
                 ),
+                CallbackQueryHandler(tech_support, pattern=r"tech_support"),
                 CallbackQueryHandler(handle_categories),
             ],
             HANDLE_PRODUCTS: [
@@ -1043,6 +1072,9 @@ def bot_starting():
                 CallbackQueryHandler(
                     show_purchases_info, pattern=r"purchases"
                 ),
+            ],
+            HANDLE_TECH_SUPPORT: [
+                CallbackQueryHandler(start, pattern=r"back"),
             ],
         },
         fallbacks=[

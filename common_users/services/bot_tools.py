@@ -7,10 +7,18 @@ from django.core.paginator import Paginator
 from asgiref.sync import sync_to_async
 from django.db.models import Count, F
 
+from common_users.constants import UserType
 from common_users.models import CommonUser, FAQ, CommonUserPurchase
 from common_users.services.cart import Cart
 
 from orders.models import Category, Product
+
+
+@sync_to_async
+def get_user(context):
+    telegram_user_id = context.user_data["telegram_user_id"]
+    user = CommonUser.objects.get(telegram_user_id=telegram_user_id)
+    return user
 
 
 @sync_to_async
@@ -34,6 +42,7 @@ def update_user_car(telegram_user_id, update_dict):
     CommonUser.objects.filter(
         telegram_user_id=telegram_user_id,
     ).update(**update_dict)
+
     user = CommonUser.objects.filter(
         telegram_user_id=telegram_user_id,
     ).first()
@@ -235,6 +244,16 @@ def get_purchases(context):
     ).annotate(product_name=F("product__name"))
 
     return [purchase for purchase in purchases]
+
+
+@sync_to_async
+def get_admins():
+    """returns admins"""
+    admins = CommonUser.objects.filter(
+        user_type=UserType.ADMIN,
+    )
+
+    return [admin for admin in admins]
 
 
 @sync_to_async
